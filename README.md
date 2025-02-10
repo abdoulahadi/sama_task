@@ -1,6 +1,6 @@
 # sama_task
 
-A new Flutter project.
+It'a project for Force-N program (Mobile Dev). The aim of this project is to make a task management. 
 
 ## Getting Started
 
