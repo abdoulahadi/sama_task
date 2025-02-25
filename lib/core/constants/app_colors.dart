@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sama_task/data/models/task.dart';
 
 class AppColors {
   static const Color primary = Color(0xFF080F29);
@@ -9,4 +10,18 @@ class AppColors {
   static const Color moyenne = Color(0xFFA24912);
   static const Color elevee = Color(0xFFA2127E);
   static const Color bgTaskItem = Color(0xFF5D6995);
+
+  
+  static Color getPriorityColor(TaskPriority priority) {
+    switch (priority) {
+      case TaskPriority.high:
+        return AppColors.elevee;
+      case TaskPriority.medium:
+        return AppColors.moyenne;
+      case TaskPriority.low:
+        return AppColors.basse;
+      default:
+        return AppColors.basse;
+    }
+  }
 }

@@ -1,34 +1,169 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:sama_task/core/constants/app_colors.dart';
+import 'package:sama_task/core/services/task.dart';
+import 'package:sama_task/core/services/user.dart';
+import 'package:sama_task/core/utils/convert_to_color.dart';
+import 'package:sama_task/core/utils/image_view.dart';
+import 'package:sama_task/data/models/task.dart';
+import 'package:sama_task/data/models/user.dart';
+import 'package:sama_task/data/repositories/shared_preferences.dart';
+import 'package:sama_task/presentation/screens/auth/sign_in.dart';
+import 'package:sama_task/presentation/screens/home/header.dart';
 import 'package:sama_task/presentation/widgets/add_task.dart';
-import 'package:sama_task/presentation/widgets/priority_card.dart';
 import 'package:sama_task/presentation/widgets/task_item.dart';
 import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 
-class Home extends StatelessWidget {
+class Home extends StatefulWidget {
   const Home({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController contentController = TextEditingController();
+  State<Home> createState() => _HomeState();
+}
 
+class _HomeState extends State<Home> {
+  late String? _token = '';
+  File? _image;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTasks();
+  }
+
+  Future<void> _initialize() async {
+    String? token = await UserPreferences.getToken();
+    setState(() {
+      _token = token;
+    });
+  }
+
+  final TextEditingController titleController = TextEditingController();
+  final TextEditingController contentController = TextEditingController();
+  final TextEditingController dueToController = TextEditingController();
+  String? selectedPriority;
+
+  final TaskService _taskService = TaskService();
+  final UserService _userService = UserService();
+  late User _user = User(
+    id: 0,
+    nom: '',
+    prenom: '',
+    username: '',
+    createdAt: DateTime.now(),
+    updatedAt: DateTime.now(),
+  );
+
+  List<Task> _lastTasks = [];
+  bool _isLoading = true;
+  int _lowCount = 0;
+  int _mediumCount = 0;
+  int _highCount = 0;
+
+  Future<void> _fetchTasks() async {
+    try {
+      await _initialize();
+      List<Task> tasks = await _taskService.getAll(_token!);
+      print(tasks);
+      tasks.sort((a, b) => b.createdAt!.compareTo(a.createdAt!));
+      setState(() {
+        _lastTasks = tasks.take(5).toList();
+
+        _lowCount = tasks.where((t) => t.priority == TaskPriority.low).length;
+        _mediumCount =
+            tasks.where((t) => t.priority == TaskPriority.medium).length;
+        _highCount = tasks.where((t) => t.priority == TaskPriority.high).length;
+        _isLoading = false;
+      });
+      await _getProfile();
+      _loadSavedImage();
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _getProfile() async {
+    try {
+      User user = await _userService.getProfile(_token!);
+      // print(
+      //     "User reçu: nom='${user.nom}', prenom='${user.prenom}', username='${user.username}', email='${user.email ?? "null"}'");
+      setState(() {
+        _user = user;
+      });
+
+      print(user);
+    } catch (e) {
+      print("Erreur lors de la récupération du profil: $e");
+    }
+  }
+
+  void _loadSavedImage() async {
+    if (_user.photo != null) {
+      final imageFile = File(_user.photo!);
+      if (await imageFile.exists()) {
+        setState(() {
+          _image = imageFile;
+        });
+      }
+    }
+  }
+
+  Future<void> _addTask() async {
+    print(_token!);
+    try {
+      TaskPriority priority = TaskPriority.low;
+      if (selectedPriority == 'Moyenne') priority = TaskPriority.medium;
+      if (selectedPriority == 'Élevée') priority = TaskPriority.high;
+
+      Task newTask = Task(
+        title: titleController.text,
+        content: contentController.text,
+        priority: priority,
+        color: AppColors.getPriorityColor(priority).toString(),
+        dueDate: DateTime.parse(dueToController.text),
+      );
+
+      await _taskService.create(_token!, newTask);
+      _fetchTasks();
+      Navigator.pop(context);
+    } catch (e) {
+      print("Erreur lors de l'ajout de la tâche: $e");
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _fetchTasks();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     void showTaskForm(
         {required String formTitle, required VoidCallback onSubmit}) {
       showModalBottomSheet(
         context: context,
-        isScrollControlled: true, 
+        isScrollControlled: true,
         builder: (BuildContext context) {
           return Padding(
-            padding: MediaQuery.of(context)
-                .viewInsets,
+            padding: MediaQuery.of(context).viewInsets,
             child: Container(
               padding: const EdgeInsets.all(16.0),
               child: TaskForm(
                 titleController: titleController,
                 contentController: contentController,
+                dueToController: dueToController,
                 formTitle: formTitle,
+                submitButtonText: "Add Task",
                 onSubmit: onSubmit,
+                onPriorityChanged: (priority) {
+                  setState(() {
+                    selectedPriority = priority;
+                  });
+                },
               ),
             ),
           );
@@ -46,25 +181,35 @@ class Home extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               RichText(
-                text: const TextSpan(
-                  style: TextStyle(fontSize: 20, color: Colors.black),
+                text: TextSpan(
+                  style: const TextStyle(fontSize: 20, color: Colors.black),
                   children: [
-                    TextSpan(text: "Welcome back ! "),
+                    const TextSpan(text: "Welcome back ! "),
                     TextSpan(
-                      text: "Cheikh Diop",
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      text: _user.nom,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
               ),
               GestureDetector(
                 onTap: () {
-                  Navigator.pushNamed(context, '/profile');
+                  print(
+                      "Navigation vers /profile avec : User = $_user, Token = $_token");
+
+                  Navigator.pushNamed(
+                    context,
+                    '/profile',
+                    arguments: {
+                      'user': _user,
+                      'token': _token,
+                    },
+                  );
                 },
-                child: const CircleAvatar(
+                child: CircleAvatar(
                   radius: 20,
-                  backgroundImage: AssetImage(
-                      "assets/images/profile.jpeg"),
+                  backgroundImage:
+                      _isLoading ? null : getProfileImage(_image, _user),
                 ),
               ),
             ],
@@ -77,7 +222,10 @@ class Home extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SamaTaskHeader(),
+              SamaTaskHeader(
+                  lowCount: _lowCount,
+                  mediumCount: _mediumCount,
+                  highCount: _highCount),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -94,9 +242,27 @@ class Home extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(
+              SizedBox(
                 height: 400,
-                child: LastTask(),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _lastTasks.isEmpty
+                        ? const Center(child: Text('Aucune tâche disponible.'))
+                        : ListView.builder(
+                            itemCount: _lastTasks.length,
+                            itemBuilder: (context, index) {
+                              final task = _lastTasks[index];
+                              return TaskItem(
+                                id: task.id!,
+                                title: task.title,
+                                content: task.content ?? '',
+                                dueDate: task.dueDate,
+                                priority: task.priority,
+                                date: task.dueDate.toIso8601String(),
+                                color: hexToColor(task.color),
+                              );
+                            },
+                          ),
               ),
             ],
           ),
@@ -112,8 +278,18 @@ class Home extends StatelessWidget {
             foregroundColor: AppColors.background,
             shape: const CircleBorder(),
             child: const Icon(Icons.logout),
-            onTap: () {
-              Navigator.pushNamed(context, '/signIn');
+            onTap: () async {
+              await UserPreferences.clearUserInfo();
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (context) => SignInScreen()),
+                (Route<dynamic> route) => false,
+              );
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('You have been logged out successfully.'),
+                ),
+              );
             },
           ),
           SpeedDialChild(
@@ -124,92 +300,12 @@ class Home extends StatelessWidget {
             onTap: () {
               showTaskForm(
                 formTitle: 'Add a Task',
-                onSubmit: () {
-                  Navigator.pop(context);
-                },
+                onSubmit: _addTask,
               );
             },
           ),
         ],
       ),
-    );
-  }
-}
-
-class SamaTaskHeader extends StatelessWidget {
-  const SamaTaskHeader({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Center(
-          child: Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 8,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              width: MediaQuery.of(context).size.width * 1.2,
-              height: 150,
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: Image.asset(
-                  'assets/images/samatask_logo.png',
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        GridView.count(
-          crossAxisCount: 3, // Nombre de colonnes
-          shrinkWrap: true,
-          physics:
-              const NeverScrollableScrollPhysics(), // Empêcher la défilement indépendante
-          children: const [
-            PriorityCard(number: 12, priority: 'Basse'),
-            PriorityCard(number: 10, priority: 'Moyenne'),
-            PriorityCard(number: 07, priority: 'Elevée'),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class LastTask extends StatelessWidget {
-  const LastTask({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      children: const [
-        TaskItem(
-          title: 'Acheter des fournitures',
-          content: 'Acheter des fournitures ..',
-          date: '12/09/2021',
-          color: AppColors.basse,
-        ),
-        TaskItem(
-          title: 'Réunion avec l\'équipe',
-          content: 'Réunion avec l\'équipe .',
-          date: '15/09/2021',
-          color: AppColors.moyenne,
-        ),
-        TaskItem(
-          title: 'Préparer le rapport',
-          content: 'Préparer le rapport *',
-          date: '20/09/2021',
-          color: AppColors.elevee,
-        ),
-      ],
     );
   }
 }

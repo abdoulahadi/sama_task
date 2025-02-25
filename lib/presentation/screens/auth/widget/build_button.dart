@@ -3,16 +3,14 @@ import 'package:sama_task/core/constants/app_colors.dart';
 
 class CustomButton extends StatelessWidget {
   final String text;
-  final String route;
-  final BuildContext context;
-  final Color? color; // Ajout d'une couleur personnalisable
+  final VoidCallback? onPressed; 
+  final Color? color;
 
   const CustomButton({
     Key? key,
     required this.text,
-    required this.route,
-    required this.context,
-    this.color, // Paramètre optionnel
+    this.onPressed,
+    this.color,
   }) : super(key: key);
 
   @override
@@ -20,7 +18,7 @@ class CustomButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
-        onPressed: () => Navigator.pushNamed(context, route),
+        onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color ?? AppColors.secondary,
           padding: const EdgeInsets.symmetric(vertical: 15),
